@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.repositories.mission import (
     create_mission,
@@ -11,7 +12,11 @@ from app.repositories.mission import (
 )
 from app.schemas import MissionCreate, MissionResponse, MissionUpdate
 
-router = APIRouter(prefix="/missions", tags=["missions"])
+router = APIRouter(
+    prefix="/missions",
+    tags=["missions"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("", response_model=MissionResponse, status_code=status.HTTP_201_CREATED)
