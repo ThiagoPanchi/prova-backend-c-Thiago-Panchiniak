@@ -110,3 +110,40 @@ Operações relacionadas às regras de negócio são direcionadas para a API pri
 Paralelamente, **Prometheus e Grafana formam a camada de observabilidade**, permitindo que a equipe técnica acompanhe o funcionamento e o desempenho de toda a infraestrutura.
 
 Essa separação de responsabilidades torna a arquitetura mais **segura, modular e escalável**, além de facilitar a manutenção e a evolução independente de cada serviço.
+
+
+## Parte 2: Desenvolvimento de API RESTful
+
+### Como instalar e executar a API
+
+Crie e ative um ambiente virtual:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Instale as dependências:
+
+```bash
+pip install -r requirements.txt
+```
+
+Execute a aplicação:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+A API ficará disponível em:
+
+```text
+http://127.0.0.1:8000
+```
+
+A documentação interativa pode ser acessada em:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
