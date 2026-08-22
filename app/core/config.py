@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     debug: bool = False
     api_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./missions.db"
+    redis_url: str = "redis://localhost:6379/0"
     secret_key: str = "change-this-secret-key"
     access_token_expire_minutes: int = 30
     ai_model_name: str = "aerial_mapping_yolo"

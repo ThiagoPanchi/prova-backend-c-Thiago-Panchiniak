@@ -147,3 +147,113 @@ A documentação interativa pode ser acessada em:
 http://127.0.0.1:8000/docs
 ```
 
+## Parte 3: Integração de Modelos de IA
+
+Foi criado um módulo para simular a integração com modelos de IA responsáveis pelo processamento de imagens aéreas de drones.
+
+O endpoint principal recebe uma imagem, valida os parâmetros enviados, executa o processamento através de um serviço dedicado e registra o histórico da execução no banco de dados.
+
+### Endpoint de processamento
+
+```http
+POST /api/v1/ai-processing/process
+```
+
+O endpoint recebe dados no formato `multipart/form-data`:
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `mission_id` | integer | ID da missão relacionada ao processamento |
+| `confidence_threshold` | float | Valor entre `0` e `1` usado como limite de confiança |
+| `image` | file | Imagem aérea enviada para processamento |
+
+Exemplo com `curl`:
+
+```bash
+curl.exe -X POST "http://127.0.0.1:8000/api/v1/ai-processing/process" ^
+  -H "Authorization: Bearer SEU_TOKEN" ^
+  -F "mission_id=1" ^
+  -F "confidence_threshold=0.7" ^
+  -F "image=@C:/Dev/teste-api/drone-images/imagem.tif;type=image/tiff"
+```
+
+### Validações da imagem
+
+Antes de enviar a imagem para o modelo, a API valida:
+
+- tipo do arquivo
+- extensão do arquivo
+- arquivo vazio
+- arquivo inválido ou corrompido
+- tamanho máximo do arquivo
+
+Formatos aceitos:
+
+- `.jpg`
+- `.jpeg`
+- `.tif`
+- `.tiff`
+- `.geotiff`
+
+### Modelo de IA
+
+O modelo é carregado no `lifespan` do FastAPI, durante a inicialização da aplicação. Dessa forma, ele é carregado apenas uma vez e permanece em memória para ser reutilizado pelas requisições.
+
+Atualmente, o projeto utiliza um modelo falso apenas para validar o fluxo de entrada, processamento, saída e registro de histórico.
+
+Modelo configurado no momento:
+
+```text
+MODEL_NAME = "aerial_mapping_yolo"
+MODEL_VERSION = "1.0.0"
+```
+
+### Histórico de processamentos
+
+Cada processamento é registrado na tabela de histórico com os seguintes campos:
+
+- `id`
+- `mission_id`
+- `created_at`
+- `model_name`
+- `model_version`
+- `inference_time`
+- `status`
+- `result`
+- `error_message`
+
+O campo `result` é salvo como JSON, por exemplo:
+
+```json
+{
+  "detections": 17,
+  "classes": {
+    "building": 10,
+    "road": 4,
+    "vehicle": 3
+  }
+}
+```
+
+Também são registrados casos de falha, incluindo a mensagem do erro no campo `error_message`.
+
+### Endpoints de histórico
+
+```http
+GET    /api/v1/predictions
+GET    /api/v1/predictions/{id}
+PUT    /api/v1/predictions/{id}
+DELETE /api/v1/predictions/{id}
+GET    /api/v1/missions/{mission_id}/predictions
+```
+
+Todos os endpoints de processamento e histórico exigem autenticação JWT via header:
+
+```http
+Authorization: Bearer <token>
+```
+
+### A fazer
+
+Substituir o modelo falso por um modelo real previamente treinado, mantendo a mesma interface de serviço para carregamento, inferência, versionamento e registro de histórico.
+
