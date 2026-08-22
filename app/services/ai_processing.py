@@ -3,12 +3,15 @@ from typing import Any
 
 from app.core.config import settings
 
+MODEL_NAME = "aerial_mapping_yolo"
+MODEL_VERSION = "1.0.0"
+
 
 class ModelService:
     def __init__(self) -> None:
         self.model: dict[str, str] | None = None
-        self.model_name = settings.ai_model_name
-        self.model_version = settings.ai_model_version
+        self.model_name = settings.ai_model_name or MODEL_NAME
+        self.model_version = settings.ai_model_version or MODEL_VERSION
 
     def load_model(self) -> dict[str, str]:
         if self.model is None:
