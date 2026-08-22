@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.repositories.prediction_history import (
     delete_prediction,
@@ -11,7 +12,10 @@ from app.repositories.prediction_history import (
 )
 from app.schemas import PredictionResponse, PredictionUpdate
 
-router = APIRouter(tags=["predictions"])
+router = APIRouter(
+    tags=["predictions"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/predictions", response_model=list[PredictionResponse])

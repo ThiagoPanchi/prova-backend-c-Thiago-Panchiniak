@@ -2,11 +2,16 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.schemas import InferenceRequest, InferenceResponse
 from app.services.ai_processing import ai_processing_service
 
-router = APIRouter(prefix="/ai-processing", tags=["ai-processing"])
+router = APIRouter(
+    prefix="/ai-processing",
+    tags=["ai-processing"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("/process", response_model=InferenceResponse)
