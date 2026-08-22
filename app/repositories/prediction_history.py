@@ -1,5 +1,6 @@
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import PredictionHistory
@@ -28,3 +29,22 @@ def register_prediction_result(
     db.commit()
     db.refresh(prediction)
     return prediction
+
+
+def get_predictions(db: Session) -> list[PredictionHistory]:
+    return list(db.scalars(select(PredictionHistory)).all())
+
+
+def get_prediction(db: Session, prediction_id: int) -> PredictionHistory | None:
+    return db.get(PredictionHistory, prediction_id)
+
+
+def get_predictions_by_mission(
+    db: Session,
+    mission_id: int,
+) -> list[PredictionHistory]:
+    return list(
+        db.scalars(
+            select(PredictionHistory).where(PredictionHistory.mission_id == mission_id)
+        ).all()
+    )
