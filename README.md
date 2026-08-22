@@ -334,6 +334,68 @@ Neste contexto, ele pode ser usado futuramente para:
 
 No momento, o Redis é apenas orquestrado no ambiente e configurado via `REDIS_URL`, sem uso direto na lógica da aplicação.
 
+### Por que utilizar Redis neste cenário?
+
+O Redis é útil porque o processamento de imagens aéreas pode ser demorado e gerar alto volume de requisições simultâneas.
+
+Neste cenário, ele pode apoiar a aplicação em pontos como cache, controle de estado temporário e gerenciamento de filas de processamento. Por exemplo, ao receber uma solicitação de processamento, a API poderia registrar a tarefa, colocar o trabalho em uma fila e retornar rapidamente para o cliente, enquanto workers processam as imagens em segundo plano.
+
+Isso evita que a API fique bloqueada durante inferências pesadas e melhora a capacidade de atender múltiplos usuários ao mesmo tempo.
+
+### Como escalar para processar milhares de imagens simultaneamente?
+
+Para processar milhares de imagens simultaneamente, a API não deveria executar todo o processamento diretamente durante a requisição HTTP.
+
+A abordagem recomendada seria separar a aplicação em componentes:
+
+- API FastAPI para autenticação, validação, criação de tarefas e consulta de status
+- fila de mensagens para armazenar solicitações de processamento
+- workers especializados para executar inferência de IA em paralelo
+- storage externo para armazenar imagens e resultados grandes
+- banco de dados para persistir metadados, status e histórico
+
+Com essa arquitetura, seria possível escalar horizontalmente a API e os workers de forma independente. Se o gargalo estiver na entrada de requisições, aumentam-se réplicas da API. Se o gargalo estiver na inferência, aumentam-se workers, inclusive em máquinas com GPU.
+
+Também seria importante limitar tamanho de arquivos, controlar concorrência, aplicar rate limiting e usar observabilidade com métricas de fila, tempo médio de processamento e taxa de falhas.
+
+### Como faria o deploy em AWS?
+
+Na AWS, uma arquitetura possível seria:
+
+- API containerizada publicada no Amazon ECS Fargate ou Amazon EKS
+- imagens Docker armazenadas no Amazon ECR
+- PostgreSQL gerenciado pelo Amazon RDS
+- Redis gerenciado pelo Amazon ElastiCache
+- arquivos de imagem armazenados no Amazon S3
+- fila de processamento com Amazon SQS ou Redis, dependendo do desenho final
+- logs e métricas no Amazon CloudWatch
+- balanceamento de carga com Application Load Balancer
+
+O fluxo seria: o cliente acessa a API pelo Load Balancer, a API valida a requisição, registra a tarefa no banco, envia o processamento para uma fila e os workers consomem essa fila para executar a inferência. Arquivos grandes seriam enviados diretamente para o S3 usando URLs pré-assinadas, evitando trafegar imagens pesadas pela API.
+
+### Como desacoplaria o processamento pesado da API?
+
+O processamento pesado deve ser executado fora do ciclo da requisição HTTP.
+
+Em vez de a API processar a imagem imediatamente, ela deveria:
+
+- receber a solicitação
+- validar usuário, missão e parâmetros
+- registrar uma tarefa com status inicial, como `pending`
+- enviar a tarefa para uma fila
+- retornar um identificador de processamento para o cliente
+
+Depois disso, workers independentes consumiriam a fila, carregariam o modelo de IA, executariam a inferência, salvariam o resultado no banco e atualizariam o status para `success` ou `failed`.
+
+O cliente poderia consultar o andamento usando endpoints de histórico, como:
+
+```http
+GET /api/v1/predictions/{id}
+GET /api/v1/missions/{mission_id}/predictions
+```
+
+Essa separação melhora escalabilidade, resiliência e tempo de resposta da API.
+
 ### Healthcheck da API
 
 A API possui o endpoint:
@@ -386,3 +448,98 @@ A configuração Docker foi implementada em etapas:
 5. Configuração dos healthchecks
 6. Configuração para a API aguardar o banco de dados
 
+## Parte 5: Questões extras 
+
+# Questão 4. Um usuário envia 500 imagens de drone. O processamento pode levar vários minutos. Descreva uma arquitetura para esse fluxo. 
+
+Para esse fluxo, eu usaria uma arquitetura assíncrona, evitando que a API processe as 500 imagens diretamente durante a requisição HTTP.
+Fluxo recomendado:
+ 1. O usuário solicita o processamento de um lote de imagens.
+ 2. A API autentica o usuário e valida a missão.
+ 3. A API cria um registro de processamento em lote no banco com status pending.
+ 4. As imagens são enviadas diretamente para um storage, como Amazon S3, usando URLs pré-assinadas.
+ 5. Para cada imagem enviada, a API cria uma tarefa individual de processamento.
+ 6. As tarefas são publicadas em uma fila, como Redis Queue, Celery com Redis, RabbitMQ ou Amazon SQS.
+ 7. Workers independentes consomem as tarefas da fila.
+ 8. Cada worker carrega o modelo de IA e processa uma ou mais imagens.
+ 9. O resultado de cada imagem é salvo no banco com status success ou failed.
+10. O status geral do lote é atualizado conforme o progresso.
+11. O usuário consulta o andamento pela API ou recebe atualizações via WebSocket/notification.
+Componentes principais:
+- FastAPI: recebe requisições, autentica, valida e registra tarefas.
+- PostgreSQL: armazena missões, lotes, status e histórico de predições.
+- S3 ou storage equivalente: armazena imagens grandes.
+- Redis/SQS/RabbitMQ: fila de processamento.
+- Workers: executam inferência de IA fora da API.
+- Redis: pode armazenar estados temporários, progresso e cache.
+- WebSocket ou polling: permite acompanhar progresso do processamento.
+Essa arquitetura evita timeout HTTP, permite escalar workers separadamente da API e torna o processamento mais resiliente a falhas.
+
+# Questão 5. O upload de uma imagem de 2 GB não deve passar pela API. Como você resolveria isso? 
+
+Eu resolveria usando upload direto para um storage externo, como Amazon S3, com URL pré-assinada.
+Fluxo:
+1. O cliente solicita à API uma URL de upload.
+2. A API autentica o usuário e valida se ele pode enviar arquivos para aquela missão.
+3. A API gera uma URL pré-assinada do S3 com tempo de expiração curto.
+4. O cliente envia a imagem de 2 GB diretamente para o S3.
+5. A API não recebe o arquivo, apenas registra metadados como nome, tamanho, missão e caminho no storage.
+6. Após o upload, o cliente confirma para a API que o arquivo foi enviado.
+7. A API cria uma tarefa de processamento apontando para o objeto no S3.
+8. Workers baixam/processam a imagem a partir do S3.
+Vantagens:
+- evita sobrecarregar a API
+- reduz uso de memória e banda do backend
+- melhora escalabilidade
+- permite uploads grandes com controle de acesso
+- facilita retomada, expiração e auditoria
+A API ficaria responsável por autorização e metadados, não pelo tráfego pesado do arquivo.
+
+# Questão 6. Como impedir que um usuário baixe imagens pertencentes a outro cliente? 
+
+Eu impediria isso aplicando controle de acesso por cliente/tenant em todas as operações.
+Estratégia:
+1. Cada imagem deve estar vinculada a um client_id, user_id ou organization_id.
+2. O token JWT deve conter a identidade do usuário e, se aplicável, o cliente/organização.
+3. Ao solicitar download, a API verifica se a imagem pertence ao mesmo cliente do usuário autenticado.
+4. Se o usuário não tiver permissão, retorna 403 Forbidden.
+5. A API nunca expõe links públicos permanentes.
+6. Para arquivos no S3, a API gera URLs pré-assinadas somente após validar permissão.
+7. As URLs devem ter expiração curta.
+8. O bucket deve permanecer privado.
+9. Logs de acesso devem ser registrados para auditoria.
+Fluxo seguro:
+Usuário solicita download
+↓
+API valida JWT
+↓
+API busca metadados da imagem no banco
+↓
+API compara client_id da imagem com client_id do usuário
+↓
+Se permitido, gera URL pré-assinada curta
+↓
+Se negado, retorna 403
+Assim, mesmo que um usuário descubra o ID de outra imagem, ele não consegue baixá-la sem autorização.
+
+### Parte 6: Portfólio
+
+https://github.com/ThiagoPanchi/geo-ia
+
+Sistema web para consulta de eventos históricos, com proposta de enriquecimento por IA, persistência de dados georreferenciados e visualização em mapa.
+
+O projeto ainda não foi finalizado. A integração com IA para enriquecer e apoiar as consultas históricas ficou incompleta, e a parte de WebGIS ainda precisa de melhorias, especialmente em usabilidade, organização das camadas e experiência de navegação no mapa.
+
+Mesmo incompleto, o projeto foi importante para explorar conceitos de georreferenciamento, visualização espacial e integração entre backend, IA e interface web. Hoje, eu revisaria algumas decisões técnicas, principalmente a escolha da biblioteca de mapas. Provavelmente substituiria o Mapbox por uma alternativa como Leaflet, buscando uma solução mais simples, aberta e flexível para o contexto do projeto.
+
+### USO DE IA
+
+Durante a execução deste desafio técnico, utilizei ferramentas de IA como apoio ao desenvolvimento, principalmente para acelerar tarefas de estruturação inicial, revisão de organização do projeto, geração de exemplos de código e validação de boas práticas em FastAPI, Docker e arquitetura de APIs.
+
+A IA foi utilizada como ferramenta auxiliar, não como substituta do processo de decisão técnica. As decisões sobre a divisão das etapas, escolha da estrutura do projeto, definição dos módulos, separação entre rotas, schemas, services e repositories, além da ordem de implementação, foram conduzidas e revisadas por mim ao longo do desenvolvimento.
+
+Também revisei o código gerado, ajustei o escopo das implementações e conduzi o trabalho de forma incremental, evitando criar funcionalidades além do necessário em cada etapa. Essa abordagem permitiu manter maior controle sobre a evolução do projeto, validar cada parte separadamente e garantir que a solução permanecesse alinhada aos requisitos do desafio.
+
+A IA também foi usada para apoiar a documentação, especialmente na organização das explicações técnicas sobre autenticação JWT, processamento de imagens, uso de Redis, Docker, PostgreSQL, healthchecks e possíveis estratégias de escalabilidade. Ainda assim, todo o conteúdo foi revisado e adaptado por mim para refletir as decisões tomadas durante o desenvolvimento.
+
+Portanto, o uso de IA neste projeto teve papel de apoio produtivo e revisão técnica, enquanto o planejamento, a validação das decisões, a condução incremental da implementação e a análise final da solução ficaram sob minha responsabilidade.
