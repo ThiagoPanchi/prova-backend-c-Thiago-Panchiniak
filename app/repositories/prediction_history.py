@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import PredictionHistory
+from app.schemas import PredictionUpdate
 
 
 def register_prediction_result(
@@ -48,3 +49,30 @@ def get_predictions_by_mission(
             select(PredictionHistory).where(PredictionHistory.mission_id == mission_id)
         ).all()
     )
+
+
+def update_prediction(
+    db: Session,
+    prediction_id: int,
+    prediction_data: PredictionUpdate,
+) -> PredictionHistory | None:
+    prediction = get_prediction(db, prediction_id)
+    if prediction is None:
+        return None
+
+    for field, value in prediction_data.model_dump(exclude_unset=True).items():
+        setattr(prediction, field, value)
+
+    db.commit()
+    db.refresh(prediction)
+    return prediction
+
+
+def delete_prediction(db: Session, prediction_id: int) -> bool:
+    prediction = get_prediction(db, prediction_id)
+    if prediction is None:
+        return False
+
+    db.delete(prediction)
+    db.commit()
+    return True

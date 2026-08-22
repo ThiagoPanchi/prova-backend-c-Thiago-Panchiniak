@@ -17,6 +17,15 @@ class InferenceResponse(BaseModel):
     result: dict[str, Any] | None = None
 
 
+class PredictionUpdate(BaseModel):
+    model_name: str | None = Field(default=None, min_length=1)
+    model_version: str | None = Field(default=None, min_length=1)
+    inference_time: float | None = Field(default=None, ge=0)
+    status: str | None = Field(default=None, min_length=1)
+    result: dict[str, Any] | None = None
+    error_message: str | None = None
+
+
 class PredictionResponse(BaseModel):
     id: int
     mission_id: int
