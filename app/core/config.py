@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./missions.db"
     secret_key: str = "change-this-secret-key"
     access_token_expire_minutes: int = 30
+    ai_model_name: str = "aerial-mapping-detector"
+    ai_model_version: str = "1.0.0"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
