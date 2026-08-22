@@ -1,7 +1,13 @@
 import time
 from typing import Any
 
+from fastapi import UploadFile
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.repositories.mission import get_mission
+from app.repositories.prediction_history import create_prediction_history
+from app.schemas import InferenceRequest, InferenceResponse
 
 MODEL_NAME = "aerial_mapping_yolo"
 MODEL_VERSION = "1.0.0"
@@ -44,3 +50,58 @@ class ModelService:
 
 
 model_service = ModelService()
+
+
+class AIProcessingService:
+    def process_image(
+        self,
+        db: Session,
+        inference_request: InferenceRequest,
+        image: UploadFile,
+    ) -> InferenceResponse:
+        mission = get_mission(db, inference_request.mission_id)
+        if mission is None:
+            raise ValueError("Mission not found")
+
+        if image.content_type is None or not image.content_type.startswith("image/"):
+            raise ValueError("Uploaded file must be an image")
+
+        try:
+            prediction_result = model_service.predict(image)
+            prediction = create_prediction_history(
+                db=db,
+                mission_id=inference_request.mission_id,
+                model_name=prediction_result["model_name"],
+                model_version=prediction_result["model_version"],
+                inference_time=prediction_result["inference_time"],
+                status="completed",
+                result=prediction_result["result"],
+            )
+        except Exception as exc:
+            prediction = create_prediction_history(
+                db=db,
+                mission_id=inference_request.mission_id,
+                model_name=model_service.model_name,
+                model_version=model_service.model_version,
+                inference_time=0,
+                status="failed",
+                error_message=str(exc),
+            )
+            return InferenceResponse(
+                prediction_id=prediction.id,
+                status=prediction.status,
+                model_version=prediction.model_version,
+                inference_time=prediction.inference_time,
+                result=prediction.result,
+            )
+
+        return InferenceResponse(
+            prediction_id=prediction.id,
+            status=prediction.status,
+            model_version=prediction.model_version,
+            inference_time=prediction.inference_time,
+            result=prediction.result,
+        )
+
+
+ai_processing_service = AIProcessingService()
