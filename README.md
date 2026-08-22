@@ -147,6 +147,97 @@ A documentação interativa pode ser acessada em:
 http://127.0.0.1:8000/docs
 ```
 
+### Banco de dados
+
+Para execução local, a aplicação utiliza SQLite por padrão:
+
+```env
+DATABASE_URL=sqlite:///./missions.db
+```
+
+No ambiente Docker, a aplicação está preparada para usar PostgreSQL através da variável `DATABASE_URL`:
+
+```env
+DATABASE_URL=postgresql+psycopg://drone_user:drone_password@postgres:5432/drone_mapping
+```
+
+Essa configuração permite manter a mesma camada de repositories com SQLAlchemy, trocando apenas a URL de conexão conforme o ambiente.
+
+### Autenticação
+
+As rotas de missões são protegidas por autenticação JWT.
+
+Para obter um token, use:
+
+```http
+POST /api/v1/auth/login
+```
+
+Corpo da requisição:
+
+```json
+{
+  "username": "admin",
+  "password": "senha"
+}
+```
+
+Resposta esperada:
+
+```json
+{
+  "access_token": "...",
+  "token_type": "bearer"
+}
+```
+
+O token deve ser enviado nas rotas protegidas usando o header:
+
+```http
+Authorization: Bearer <token>
+```
+
+### CRUD de missões
+
+A API implementa as operações de criação, leitura, atualização e exclusão de missões de levantamento aéreo com drones.
+
+Campos da missão:
+
+- `id`
+- `name`
+- `status`
+- `created_at`
+- `drone_model`
+- `image_count`
+- `area_hectares`
+
+Endpoints disponíveis:
+
+```http
+POST   /api/v1/missions
+GET    /api/v1/missions
+GET    /api/v1/missions/{id}
+PUT    /api/v1/missions/{id}
+DELETE /api/v1/missions/{id}
+```
+
+Exemplo de criação de missão:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/v1/missions" \
+  -H "Authorization: Bearer SEU_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Levantamento Fazenda Norte",
+    "status": "planned",
+    "drone_model": "DJI Phantom 4 RTK",
+    "image_count": 120,
+    "area_hectares": 45.5
+  }'
+```
+
+Os campos `id` e `created_at` são gerados automaticamente pela aplicação/banco de dados.
+
 ## Parte 3: Integração de Modelos de IA
 
 Foi criado um módulo para simular a integração com modelos de IA responsáveis pelo processamento de imagens aéreas de drones.
