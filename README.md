@@ -321,6 +321,58 @@ O serviço utiliza volume Docker para persistência dos dados:
 postgres_data:/var/lib/postgresql/data
 ```
 
+### Healthcheck da API
+
+A API possui o endpoint:
+
+```http
+GET /api/v1/health
+```
+
+Ele pode ser testado com:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+```
+
+Resposta esperada:
+
+```json
+{"status":"ok"}
+```
+
+No `docker-compose.yml`, esse endpoint também é usado como `healthcheck` do serviço `api`, permitindo que o Docker identifique se a aplicação está saudável.
+
+### Aguardando o banco de dados
+
+O PostgreSQL possui um `healthcheck` usando `pg_isready`:
+
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U drone_user -d drone_mapping"]
+```
+
+A API depende desse healthcheck antes de iniciar:
+
+```yaml
+depends_on:
+  postgres:
+    condition: service_healthy
+```
+
+Com isso, a API só inicia depois que o PostgreSQL estiver pronto para aceitar conexões.
+
+### Ordem de implementação
+
+A configuração Docker foi implementada em etapas:
+
+1. Configuração por variáveis de ambiente
+2. Adição do driver PostgreSQL `psycopg`
+3. Criação do `Dockerfile`
+4. Criação do `docker-compose.yml`
+5. Configuração dos healthchecks
+6. Configuração para a API aguardar o banco de dados
+
 ### Redis
 
 O Redis foi incluído para deixar o ambiente preparado para cenários de maior escala.
@@ -395,58 +447,6 @@ GET /api/v1/missions/{mission_id}/predictions
 ```
 
 Essa separação melhora escalabilidade, resiliência e tempo de resposta da API.
-
-### Healthcheck da API
-
-A API possui o endpoint:
-
-```http
-GET /api/v1/health
-```
-
-Ele pode ser testado com:
-
-```bash
-curl http://127.0.0.1:8000/api/v1/health
-```
-
-Resposta esperada:
-
-```json
-{"status":"ok"}
-```
-
-No `docker-compose.yml`, esse endpoint também é usado como `healthcheck` do serviço `api`, permitindo que o Docker identifique se a aplicação está saudável.
-
-### Aguardando o banco de dados
-
-O PostgreSQL possui um `healthcheck` usando `pg_isready`:
-
-```yaml
-healthcheck:
-  test: ["CMD-SHELL", "pg_isready -U drone_user -d drone_mapping"]
-```
-
-A API depende desse healthcheck antes de iniciar:
-
-```yaml
-depends_on:
-  postgres:
-    condition: service_healthy
-```
-
-Com isso, a API só inicia depois que o PostgreSQL estiver pronto para aceitar conexões.
-
-### Ordem de implementação
-
-A configuração Docker foi implementada em etapas:
-
-1. Configuração por variáveis de ambiente
-2. Adição do driver PostgreSQL `psycopg`
-3. Criação do `Dockerfile`
-4. Criação do `docker-compose.yml`
-5. Configuração dos healthchecks
-6. Configuração para a API aguardar o banco de dados
 
 ## Parte 5: Questões extras 
 
