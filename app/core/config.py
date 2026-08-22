@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     ai_model_name: str = "aerial_mapping_yolo"
     ai_model_version: str = "1.0.0"
+    max_image_size_mb: int = 50
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
