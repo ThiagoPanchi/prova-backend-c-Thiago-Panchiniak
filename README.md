@@ -257,3 +257,132 @@ Authorization: Bearer <token>
 
 Substituir o modelo falso por um modelo real previamente treinado, mantendo a mesma interface de serviço para carregamento, inferência, versionamento e registro de histórico.
 
+## Parte 4: Docker e Orquestração de Contêineres
+
+A aplicação foi preparada para executar em contêineres utilizando Docker e Docker Compose.
+
+Foram configurados três serviços principais:
+
+- `api`: aplicação FastAPI
+- `postgres`: banco de dados PostgreSQL
+- `redis`: serviço Redis preparado para uso futuro em cache, filas ou processamento assíncrono
+
+### Como subir o ambiente com Docker
+
+Na raiz do projeto, execute:
+
+```bash
+docker compose up --build
+```
+
+Esse comando constrói a imagem da API e inicia os serviços `api`, `postgres` e `redis`.
+
+Após a inicialização, a API ficará disponível em:
+
+```text
+http://127.0.0.1:8000
+```
+
+A documentação interativa pode ser acessada em:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+### Variáveis de ambiente
+
+As principais variáveis usadas pela aplicação estão no arquivo `.env.example`:
+
+```env
+DATABASE_URL=sqlite:///./missions.db
+REDIS_URL=redis://localhost:6379/0
+SECRET_KEY=change-this-secret-key
+AI_MODEL_NAME=aerial_mapping_yolo
+AI_MODEL_VERSION=1.0.0
+MAX_IMAGE_SIZE_MB=50
+```
+
+No Docker Compose, a API utiliza PostgreSQL e Redis através das URLs internas dos serviços:
+
+```env
+DATABASE_URL=postgresql+psycopg://drone_user:drone_password@postgres:5432/drone_mapping
+REDIS_URL=redis://redis:6379/0
+```
+
+### PostgreSQL
+
+O PostgreSQL é usado como banco de dados relacional no ambiente Docker.
+
+As tabelas são criadas automaticamente na inicialização da aplicação através do SQLAlchemy.
+
+O serviço utiliza volume Docker para persistência dos dados:
+
+```yaml
+postgres_data:/var/lib/postgresql/data
+```
+
+### Redis
+
+O Redis foi incluído para deixar o ambiente preparado para cenários de maior escala.
+
+Neste contexto, ele pode ser usado futuramente para:
+
+- cache de dados acessados com frequência
+- controle temporário de estados de processamento
+- filas de tarefas assíncronas
+- desacoplamento entre recebimento da requisição e processamento pesado de imagens
+
+No momento, o Redis é apenas orquestrado no ambiente e configurado via `REDIS_URL`, sem uso direto na lógica da aplicação.
+
+### Healthcheck da API
+
+A API possui o endpoint:
+
+```http
+GET /api/v1/health
+```
+
+Ele pode ser testado com:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+```
+
+Resposta esperada:
+
+```json
+{"status":"ok"}
+```
+
+No `docker-compose.yml`, esse endpoint também é usado como `healthcheck` do serviço `api`, permitindo que o Docker identifique se a aplicação está saudável.
+
+### Aguardando o banco de dados
+
+O PostgreSQL possui um `healthcheck` usando `pg_isready`:
+
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U drone_user -d drone_mapping"]
+```
+
+A API depende desse healthcheck antes de iniciar:
+
+```yaml
+depends_on:
+  postgres:
+    condition: service_healthy
+```
+
+Com isso, a API só inicia depois que o PostgreSQL estiver pronto para aceitar conexões.
+
+### Ordem de implementação
+
+A configuração Docker foi implementada em etapas:
+
+1. Configuração por variáveis de ambiente
+2. Adição do driver PostgreSQL `psycopg`
+3. Criação do `Dockerfile`
+4. Criação do `docker-compose.yml`
+5. Configuração dos healthchecks
+6. Configuração para a API aguardar o banco de dados
+
