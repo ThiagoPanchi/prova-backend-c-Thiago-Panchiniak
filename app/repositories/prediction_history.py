@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.models import PredictionHistory
 
 
-def create_prediction_history(
+def register_prediction_result(
     db: Session,
     mission_id: int,
     model_name: str,

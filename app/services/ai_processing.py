@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.repositories.mission import get_mission
-from app.repositories.prediction_history import create_prediction_history
+from app.repositories.prediction_history import register_prediction_result
 from app.schemas import InferenceRequest, InferenceResponse
 
 MODEL_NAME = "aerial_mapping_yolo"
@@ -102,21 +102,20 @@ class AIProcessingService:
         if mission is None:
             raise ValueError("Mission not found")
 
-        self.validate_image(image)
-
         try:
+            self.validate_image(image)
             prediction_result = model_service.predict(image)
-            prediction = create_prediction_history(
+            prediction = register_prediction_result(
                 db=db,
                 mission_id=inference_request.mission_id,
                 model_name=prediction_result["model_name"],
                 model_version=prediction_result["model_version"],
                 inference_time=prediction_result["inference_time"],
-                status="completed",
+                status="success",
                 result=prediction_result["result"],
             )
         except Exception as exc:
-            prediction = create_prediction_history(
+            prediction = register_prediction_result(
                 db=db,
                 mission_id=inference_request.mission_id,
                 model_name=model_service.model_name,
